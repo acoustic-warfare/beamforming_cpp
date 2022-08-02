@@ -121,6 +121,19 @@ void generate_emulated_data(std::vector<double>& audio_data, double * r_prime) {
 
     double element_amplitude = 0;
 
+    //P ad data with P zeros in the beginning, where P is the fitler order
+
+    for (int i = 0; i < constants::elements; i++)
+    {
+        for (int j = 0; j < filter_coefficients::filter_order; j++)
+        {
+            audio_data.push_back(0);
+        }
+        
+    }
+    
+
+    // Generate actual data
     for (int i = 0; i < sample_max; i++)
     {
         t = (((double)i)/(double)constants::f_sampling);
@@ -228,10 +241,8 @@ void AW_listening_improved(double * audio_out, std::vector<double>& audio_data, 
     
 }
 
-void filter_improved(double * x,int x_length,double a_0,const double * b, int P) {
-    double x_temp[x_length];    //Create an empty array to copy the values of x
-
-    int n;
+void filter_improved(double* y, double * x,int x_length,double a_0,const double * b, int P) {
+    int n = 0;
     int i;
     int first;
     int b_first;
@@ -244,26 +255,19 @@ void filter_improved(double * x,int x_length,double a_0,const double * b, int P)
     std::cout << "\n ... ";
     */
 
-    for (n = 0; n < x_length; n++)
-    {
-        x_temp[n] = x[n];       //Get the past values of x and store them in x_temp
+    for (n = P;n < x_length; n++)
+    {       
 
-        last = n;
-        first = (n < P ? 0 : (n-P)+1);
-        b_first = (n < P ? P-1-n : 0);
-
-        x[n] = 1/a_0 *(std::inner_product(x_temp + first, x_temp + last+1, b + b_first, 0.0));
+        y[n] = 1/a_0 *(std::inner_product(x + n-P+1, x + 1 + n , b , 0.0));
         //x[n] = 1/a_0 * std::transform_reduce(x_temp + first, x_temp + last+1, b + b_first, 0.0, std::plus<>(), std::multiplies<>());
-
+        
         /*
-        std::cout << "\n x value, n= ";
+        std::cout << "\nn= ";
         std::cout << n;
-        std::cout << ", first = ";
-        std::cout << first;
-        std::cout << ", b first = ";
-        std::cout << b_first;
-        std::cout << "\n";
+        std::cout << ", x= ";
         std::cout << x[n];
+        std::cout << ", y= ";
+        std::cout << y[n];
         */
         
     }
@@ -317,14 +321,29 @@ int main() {
 
     generate_emulated_data(audio_data,r_prime);
 
+    /*
+    for (int i = 0; i < 203; i++)
+    {
+        std::cout << "\n ";
+        std::cout << audio_data[i*constants::elements];
+        std::cout << "\n ";
+    }
+    */
+    
     int samples = audio_data.size()/constants::elements;
 
     // SINGLE DIRECTION BEAMFORMING 
     std::vector<double> audio_out;
 
-    double audio_out2[32000] = {0};
+    double audio_out2[32000 + 200] = {0};
 
-    double audio_signal_temp[samples] = {0};   
+    double audio_signal_temp[samples] = {0}; 
+    double audio_filtered[samples] = {0};
+
+    //double test_filt_b[6] = {0.5, -0.5, 0.7, 0.2, 0.1, 0.3};
+    double test_filt_b[6] = {0.3, 0.1, 0.2, 0.7, -0.5, 0.5};
+
+
     for (int i = 0; i < samples; i++)
     {
         audio_signal_temp[i] = audio_data[0 + constants::elements*i];
@@ -332,7 +351,8 @@ int main() {
 
     auto start = std::chrono::high_resolution_clock::now();
     //filter(audio_signal_temp,samples,1,filter_coefficients::filter_order);
-    filter_improved(audio_signal_temp,samples,1,filter_coefficients::filt_coeffs[0],200);
+    filter_improved(audio_filtered,audio_signal_temp,samples,1,filter_coefficients::filt_coeffs[0],200);
+    //filter_improved(audio_filtered,audio_signal_temp,samples,1,test_filt_b,6);
     auto end = std::chrono::high_resolution_clock::now();
 
     std::chrono::duration<double, std::milli> float_ms = end - start;
@@ -348,12 +368,13 @@ int main() {
     //std::cout << audio_signal_temp[16000];
     std::cout << "\n ";
 
-    for (int i = 199; i < 201; i++)
+    for (int i = 16199; i < 16206; i++)
     {
         std::cout << "\n ";
-        std::cout << audio_signal_temp[i];
+        std::cout << audio_filtered[i];
         std::cout << "\n ";
     }
+
     
 
     
