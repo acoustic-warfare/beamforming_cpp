@@ -6,6 +6,7 @@
 #include <math.h> 
 #include <numeric>
 #include <functional>
+#include <immintrin.h>
 #include "constants.h"
 #include "filter_coefficients.h"
 #include <algorithm>
@@ -45,23 +46,18 @@ void generate_array_r_prime(double * r_prime) {
       }
 }
 
-void filter(double * x,int x_length,double a_0, int P) {
-    double x_temp[x_length];    //Create an empty array to copy the values of x
+void filter(double * y, double * x, int x_length, const double * b, double a_0, const int P) {
 
-    double temp_var;        //Sum variable
     int n;
     int i;
 
     for (n = 0; n < x_length; n++)
     {
-        temp_var = 0;
-        x_temp[n] = x[n];       //Get the past values of x and store them in x_temp
         //x[n] = std::inner_product(series1, series1 + n, series2, 0.0);
-        for (i = 0; i <= n && i <= P; i++)
+        for (i = 0; i <= n && i < P; i++)
         {
-            temp_var += filter_coefficients::filt_coeffs[0][i]*x_temp[n-i];
+            y[n] += b[i]*x[n-i];
         }
-        x[n] = 1/a_0 * temp_var;    //Store value in x, thus overwriting the past values of x, this explains the reason for x_temp
     }
 }
 
@@ -121,26 +117,24 @@ void generate_emulated_data(std::vector<double>& audio_data, double * r_prime) {
 
     double element_amplitude = 0;
 
-    //P ad data with P zeros in the beginning, where P is the fitler order
 
-    for (int i = 0; i < constants::elements; i++)
+
+    // Generate actual data
+    for (int mic = 0; mic < elements ; mic++)
     {
+
+        // Pad data with P zeros in the beginning, where P is the fitler order
         for (int j = 0; j < filter_coefficients::filter_order; j++)
         {
             audio_data.push_back(0);
         }
-        
-    }
-    
 
-    // Generate actual data
-    for (int i = 0; i < sample_max; i++)
-    {
-        t = (((double)i)/(double)constants::f_sampling);
+        double r_1[3] = {r_prime[mic],r_prime[mic + elements],r_prime[mic + 2*elements]};
 
-        for (int mic = 0; mic < elements ; mic++)
+        for (int i = 0; i < sample_max; i++)
         {
             double r_1[3] = {r_prime[mic],r_prime[mic + elements],r_prime[mic + 2*elements]};
+            t = (((double)i)/(double)constants::f_sampling);
 
             temp_signal_sample = 0;
 
@@ -241,6 +235,48 @@ void AW_listening_improved(double * audio_out, std::vector<double>& audio_data, 
     
 }
 
+void test_function(float *x,float * y,float *b) {
+    int x_length = 32200;
+    int P = 200;
+
+    constexpr auto AVX_FLOAT_COUNT = 8u;
+
+    std::array<float, AVX_FLOAT_COUNT> outStore;
+
+
+  for (auto n = 200u; n < x_length; ++n) {
+    // Set a SIMD register to all zeros;
+    // we will use it as an accumulator
+    auto outChunk = _mm256_setzero_ps();
+
+    // Note the increment
+    for (auto j = 0u; j < 200; j += AVX_FLOAT_COUNT) {
+
+      //int test = (std::inner_product(x + n-P+1, x + 1 + n , b , 0.0));
+
+      // Load the unaligned input signal data into a SIMD register
+      auto xChunk = _mm256_loadu_ps(x + n-P+1 + j);
+      // Load the unaligned reversed filter coefficients 
+      // into a SIMD register
+      auto cChunk = _mm256_loadu_ps(b + j);
+
+      // Multiply the both registers element-wise
+      auto temp = _mm256_mul_ps(xChunk, cChunk);
+
+      // Element-wise add to the accumulator
+      outChunk = _mm256_add_ps(outChunk, temp);
+    }
+
+    // Transfer the contents of the accumulator 
+    // to the output array
+    _mm256_storeu_ps(outStore.data(), outChunk);
+
+    // Sum the partial sums in the accumulator and assign to the output
+    y[n] = std::accumulate(outStore.begin(), outStore.end(), 0.f);
+  }
+}
+
+
 void filter_improved(double* y, double * x,int x_length,double a_0,const double * b, int P) {
     int n = 0;
     int i;
@@ -321,14 +357,14 @@ int main() {
 
     generate_emulated_data(audio_data,r_prime);
 
-    /*
-    for (int i = 0; i < 203; i++)
+    
+    for (int i = 32399; i < 32403; i++)
     {
         std::cout << "\n ";
-        std::cout << audio_data[i*constants::elements];
+        std::cout << audio_data[i];
         std::cout << "\n ";
     }
-    */
+    
     
     int samples = audio_data.size()/constants::elements;
 
@@ -340,19 +376,32 @@ int main() {
     double audio_signal_temp[samples] = {0}; 
     double audio_filtered[samples] = {0};
 
+    float audio_signal_temp2[samples] = {0}; 
+    float audio_filtered2[samples] = {0};
+    float filter_coefficients2[200] = {0};
+
+    for (int i = 0; i < 200; i++)
+    {
+        filter_coefficients2[i] = (float)filter_coefficients::filt_coeffs[0][i];
+    }
+    
+
     //double test_filt_b[6] = {0.5, -0.5, 0.7, 0.2, 0.1, 0.3};
     double test_filt_b[6] = {0.3, 0.1, 0.2, 0.7, -0.5, 0.5};
 
 
     for (int i = 0; i < samples; i++)
     {
-        audio_signal_temp[i] = audio_data[0 + constants::elements*i];
+        audio_signal_temp[i] = audio_data[i];
+        audio_signal_temp2[i] = (float)audio_data[i];
     }
 
     auto start = std::chrono::high_resolution_clock::now();
     //filter(audio_signal_temp,samples,1,filter_coefficients::filter_order);
-    filter_improved(audio_filtered,audio_signal_temp,samples,1,filter_coefficients::filt_coeffs[0],200);
+    //filter_improved(audio_filtered,audio_signal_temp,samples,1,filter_coefficients::filt_coeffs[0],200);
     //filter_improved(audio_filtered,audio_signal_temp,samples,1,test_filt_b,6);
+    test_function(audio_signal_temp2 , audio_filtered2 , filter_coefficients2);
+    //filter(audio_filtered,audio_signal_temp,samples,filter_coefficients::filt_coeffs[0],1,filter_coefficients::filter_order);
     auto end = std::chrono::high_resolution_clock::now();
 
     std::chrono::duration<double, std::milli> float_ms = end - start;
@@ -367,14 +416,15 @@ int main() {
     std::cout << "\n ";
     //std::cout << audio_signal_temp[16000];
     std::cout << "\n ";
+    
 
     for (int i = 16199; i < 16206; i++)
     {
         std::cout << "\n ";
-        std::cout << audio_filtered[i];
+        std::cout << audio_filtered2[i];
         std::cout << "\n ";
     }
-
+    
     
 
     
@@ -399,5 +449,7 @@ int main() {
 
     std::cout << "funcSleep() elapsed time is " << float_ms.count() << " milliseconds" << std::endl;
     */
+
+   
     return 0;
 }
