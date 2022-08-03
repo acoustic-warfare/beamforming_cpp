@@ -65,7 +65,7 @@ void filter(double * x,int x_length,double a_0, int P) {
     }
 }
 
-void generate_emulated_data(std::vector<double>& audio_data, double * r_prime) {
+void generate_emulated_data(std::vector<float>& audio_data, double * r_prime) {
 
     // Get emulation settings
     int sample_max = (int)((constants::t_end - constants::t_start)*constants::f_sampling);
@@ -168,13 +168,13 @@ void generate_emulated_data(std::vector<double>& audio_data, double * r_prime) {
                     
                 }
             }
-            audio_data.push_back(temp_signal_sample);
+            audio_data.push_back((float)temp_signal_sample);
         }
         
     }
     
 }
-
+/* 
 void AW_listening_improved(double * audio_out, std::vector<double>& audio_data, double * r_prime,double theta_listen,double phi_listen) {
     double theta = theta_listen * constants::pi/180;
     double phi = phi_listen * constants::pi/180;
@@ -234,39 +234,39 @@ void AW_listening_improved(double * audio_out, std::vector<double>& audio_data, 
     }
     
 }
+//  */
+// void filter_improved(double* y, double * x,int x_length,double a_0,const double * b, int P) {
+//     int n = 0;
+//     int i;
+//     int first;
+//     int b_first;
+//     int last;
+//     /*
+//     std::cout << "\n ... ";
+//     std::cout << x[0];
+//     std::cout << "\n ... ";
+//     std::cout << b[0];
+//     std::cout << "\n ... ";
+//     */
 
-void filter_improved(double* y, double * x,int x_length,double a_0,const double * b, int P) {
-    int n = 0;
-    int i;
-    int first;
-    int b_first;
-    int last;
-    /*
-    std::cout << "\n ... ";
-    std::cout << x[0];
-    std::cout << "\n ... ";
-    std::cout << b[0];
-    std::cout << "\n ... ";
-    */
+//     for (n = P;n < x_length; n++)
+//     {       
 
-    for (n = P;n < x_length; n++)
-    {       
-
-        y[n] = 1/a_0 *(std::inner_product(x + n-P+1, x + 1 + n , b , 0.0));
-        //x[n] = 1/a_0 * std::transform_reduce(x_temp + first, x_temp + last+1, b + b_first, 0.0, std::plus<>(), std::multiplies<>());
+//         y[n] = 1/a_0 *(std::inner_product(x + n-P+1, x + 1 + n , b , 0.0));
+//         //x[n] = 1/a_0 * std::transform_reduce(x_temp + first, x_temp + last+1, b + b_first, 0.0, std::plus<>(), std::multiplies<>());
         
-        /*
-        std::cout << "\nn= ";
-        std::cout << n;
-        std::cout << ", x= ";
-        std::cout << x[n];
-        std::cout << ", y= ";
-        std::cout << y[n];
-        */
+//         /*
+//         std::cout << "\nn= ";
+//         std::cout << n;
+//         std::cout << ", x= ";
+//         std::cout << x[n];
+//         std::cout << ", y= ";
+//         std::cout << y[n];
+//         */
         
-    }
-}
- std::vector<double> filter_imp(std::vector<double> x, std::vector<double> y, int x_length, int P) {
+//     }
+// }
+/* std::vector<double> filter_imp(std::vector<double> x, std::vector<double> y, int x_length, double a_0, int P) {
    
     for (int i = 0; i < x_length; ++i)
     {
@@ -278,137 +278,117 @@ void filter_improved(double* y, double * x,int x_length,double a_0,const double 
     }
     return y;
 }
+ */
 
-/* std::vector<float> filter_imp(const std::vector<float> x, std::vector<float> y, int x_length) {
+/* void filter (double y, double x, int x_length, int b, const int p){
+    int n;
+    int i;
 
-  const auto* c = filter_coefficients::filt_coeffs[0];
-  auto ys = y.size();
-  cout << ys << endl;
-  for (auto i = 0u; i < 31996; i += 4) {
-    y[i] = 0.f;
-    y[i + 1] = 0.f;
-    y[i + 2] = 0.f;
-    y[i + 3] = 0.f;
-    for (auto j = 0u; j < 195; j += 4) {
-      y[i] += x[i + j] * c[j] + x[i + j + 1] * c[j + 1] +
-              x[i + j + 2] * c[j + 2] + x[i + j + 3] * c[j + 3];
+    for( n = 0; n < x_length; n++){
 
-      y[i + 1] += x[i + j + 1] * c[j] + x[i + j + 2] * c[j + 1] +
-                  x[i + j + 3] * c[j + 2] + x[i + j + 4] * c[j + 3];
-
-      y[i + 2] += x[i + j + 2] * c[j] + x[i + j + 3] * c[j + 1] +
-                  x[i + j + 4] * c[j + 2] + x[i + j + 5] * c[j + 3];
-
-      y[i + 3] += x[i + j + 3] * c[j] + x[i + j + 4] * c[j + 1] +
-                  x[i + j + 5] * c[j + 2] + x[i + j + 6] * c[j + 3];
+        for(i=0; i <= n && i < p; i++ ){
+            y[n] += b[i]*x[n-i];
     }
-  }
-  return y;
+    }
+}
+ */
+
+__global__ void cuFirFilter2(const float *d_x, const float *d_filter, float *d_y, const int filterLength, const int filteredDataLength){
+    
+    int i = blockDim.x * blockIdx.x + threadIdx.x;
+    
+    if (i < filteredDataLength)
+    {
+        for (int j = 0; j <= filteredDataLength && j < filterLength; j++)
+        {
+            d_y[i] += d_filter[j] * d_x[i-j];
+        }
+    }
 }
 
- */
+__global__ void cuFirFilter(const float *d_data,const float *d_filter, float *d_filteredData, const int filterLength, const int filteredDataLength)
+{
+
+    int i = blockDim.x * blockIdx.x + threadIdx.x;
+
+
+    float sum = 0.0f;
+    //    printf("d_filter: %f d_data: %f \n", d_filter[i], d_data[i]);
+
+    if (i < filteredDataLength)
+    {
+        for (int j = 0; j < filterLength; j++)
+        {
+            // The first (numeratorLength-1) elements contain the filter state
+            sum += d_filter[j] * d_data[i + filterLength - j - 1];
+        }
+    }
+    d_filteredData[i] = sum;
+}
+
 int main() {
-    //std::cout << "Hello World!";
-
-    /*/////////////////////////////////////////////////// 
-
-
-            GENERATE r_prime
-
-
-    *////////////////////////////////////////////////////
-
     double r_prime[3*(constants::elements)] = {0};      //initiazte r_prime full of 0s
     generate_array_r_prime(r_prime);                    //Generate r_prime     
-
-    double test[10] = {1,2,3,4,5,6,7,8,9,10};
-    int test_length = 10;
-
-    double b[14] = {1,2,3,4,5,6,7,8,9,10,11,12,13,14};
-    int P = 14;
-
-    double a_0 = 0.7;
-
-    //filter(test,test_length,a_0,b,P);
-
-    /* for (int i = 0; i < test_length; i++)
-    {
-        //std::cout << "\n";
-        //std::cout << test[i];
-        
-    } */
-    //std::cout << constants::test_array[4];
-    
-    //std::cout << r_prime[0];
-    //std::cout << filter_coefficients::filt_coeffs[0][0];
-
-    // Generate emulated data
-    std::vector<double> audio_data;
-
-    /*/////////////////////////////////////////////////// 
-
-
-            GENERATE EMULATED DATA
-
-
-    *////////////////////////////////////////////////////
-
+    std::vector<float> audio_data;
     generate_emulated_data(audio_data,r_prime);
-
-    /*
-    for (int i = 0; i < 203; i++)
-    {
-        std::cout << "\n ";
-        std::cout << audio_data[i*constants::elements];
-        std::cout << "\n ";
-    }
-    */
     
-    int samples = audio_data.size()/constants::elements;
+    int dataLength = 32200;
+    int coeffs = 200;
+    int dataOutLen = 32200;
 
+    //float *h_data = new float[dataLength];
+    //float *h_filter = new float[coeffs];
+    
+    size_t NumberOfElements = sizeof(filter_coefficients::filt_coeffs[0])/sizeof(filter_coefficients::filt_coeffs[0][0]);
+    std::cout << "size of : " << NumberOfElements << std::endl;
+
+    float *h_filteredData = new float[dataOutLen];
+    float *d_data = nullptr;
+    cudaMalloc((void **)&d_data, dataLength * sizeof(float));
+
+    float *d_filter = nullptr;
+    cudaMalloc((void **)&d_filter, coeffs * sizeof(float));
+
+    float *d_filteredData = nullptr;
+    cudaMalloc((void **)&d_filteredData, dataOutLen * sizeof(float));
+
+    cudaMemcpy(d_data, audio_data.data(), dataLength * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_filter, filter_coefficients::filt_coeffs[0], coeffs * sizeof(float), cudaMemcpyHostToDevice);  
+
+    int threadsPerBlock = 256;
+    int blocksPerGrid = (dataOutLen + threadsPerBlock - 1) / threadsPerBlock;
+    std::cout << "Threads started: " << blocksPerGrid*threadsPerBlock << std::endl;
+    auto start = std::chrono::high_resolution_clock::now();
+    cuFirFilter<<<blocksPerGrid,threadsPerBlock>>>(d_data, d_filter, d_filteredData, coeffs, dataOutLen);
+//    cuFirFilter2<<<blocksPerGrid,threadsPerBlock>>>(d_data, d_filter, d_filteredData, coeffs, dataOutLen);
+
+    cudaMemcpy(h_filteredData, d_filteredData, dataOutLen * sizeof(float), cudaMemcpyDeviceToHost);
+
+    auto end = std::chrono::high_resolution_clock::now();
     // SINGLE DIRECTION BEAMFORMING 
-    std::vector<double> audio_out;
+/*     std::vector<float> audio_out;
+    std::vector<float> audio_signal_temp; 
 
-    double audio_out2[32000 + 200] = {0};
-
-    std::vector<double> audio_signal_temp; 
-
-    //double test_filt_b[6] = {0.5, -0.5, 0.7, 0.2, 0.1, 0.3};
-    double test_filt_b[6] = {0.3, 0.1, 0.2, 0.7, -0.5, 0.5};
-
-
-    for (int i = 0; i < samples; i++)
+    for (int i = 0; i < dataLength; i++)
     {
         audio_signal_temp.push_back(audio_data[0 + constants::elements*i]);
     }
-    std::vector<double> audio_filtered (32200,0);
-    cout << audio_filtered.size() << "size " << endl;
-    auto start = std::chrono::high_resolution_clock::now();
-    //filter(audio_signal_temp,samples,1,filter_coefficients::filter_order);
+ */
 
-    //filter_improved(audio_filtered,audio_signal_temp,samples,1,filter_coefficients::filt_coeffs[0],200);
-    //filter_improved(audio_filtered,audio_signal_temp,samples,1,test_filt_b,6);
-    audio_filtered = filter_imp(audio_signal_temp,audio_filtered, samples, 200);
-    
-    auto end = std::chrono::high_resolution_clock::now();
+
 
     std::chrono::duration<double, std::milli> float_ms = end - start;
-
     std::cout << "funcSleep() elapsed time is " << float_ms.count() << " milliseconds" << std::endl;
-
-
     // TESTING  
-    double series1[3] = {1,2,1};
-    double series2[3] = {10,10,20.1};
-    int n = sizeof(series1) / sizeof(double);
     std::cout << "\n ";
     //std::cout << audio_signal_temp[16000];
     std::cout << "\n ";
 
-    for (int i = 16199; i < 16206; i++)
+    for (int i = 12799; i < 12805; i++)
     {
+        std::cout << "Raw data: "<<  audio_data[i] << " Filtered data: ";
         std::cout << "\n ";
-        std::cout << audio_filtered[i];
+        std::cout << h_filteredData[i];
         std::cout << "\n ";
     }    
     /*
@@ -432,5 +412,13 @@ int main() {
 
     std::cout << "funcSleep() elapsed time is " << float_ms.count() << " milliseconds" << std::endl;
     */
+
+    cudaFree(d_data);
+    cudaFree(d_filter);
+    cudaFree(d_filteredData);
+
+    delete [] h_filteredData;
+
+
     return 0;
 }
