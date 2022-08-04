@@ -65,6 +65,7 @@ void filter(double * x,int x_length,double a_0, int P) {
     }
 }
 
+
 void generate_emulated_data(std::vector<float>& audio_data, double * r_prime) {
 
     // Get emulation settings
@@ -121,25 +122,23 @@ void generate_emulated_data(std::vector<float>& audio_data, double * r_prime) {
 
     double element_amplitude = 0;
 
-    //Pad data with P zeros in the beginning, where P is the fitler order
 
-    for (int i = 0; i < constants::elements; i++)
+
+    // Generate actual data
+    for (int mic = 0; mic < elements ; mic++)
     {
+
+        // Pad data with P zeros in the beginning, where P is the fitler order
         for (int j = 0; j < filter_coefficients::filter_order; j++)
         {
             audio_data.push_back(0);
         }
-    }
-    
 
-    // Generate actual data
-    for (int i = 0; i < sample_max; i++)
-    {
-        t = (((double)i)/(double)constants::f_sampling);
+        double r_1[3] = {r_prime[mic],r_prime[mic + elements],r_prime[mic + 2*elements]};
 
-        for (int mic = 0; mic < elements ; mic++)
+        for (int i = 0; i < sample_max; i++)
         {
-            double r_1[3] = {r_prime[mic],r_prime[mic + elements],r_prime[mic + 2*elements]};
+            t = (((double)i)/(double)constants::f_sampling);
 
             temp_signal_sample = 0;
 
@@ -168,7 +167,7 @@ void generate_emulated_data(std::vector<float>& audio_data, double * r_prime) {
                     
                 }
             }
-            audio_data.push_back((float)temp_signal_sample);
+            audio_data.push_back(temp_signal_sample);
         }
         
     }
@@ -280,51 +279,33 @@ void AW_listening_improved(double * audio_out, std::vector<double>& audio_data, 
 }
  */
 
-/* void filter (double y, double x, int x_length, int b, const int p){
-    int n;
-    int i;
-
-    for( n = 0; n < x_length; n++){
-
-        for(i=0; i <= n && i < p; i++ ){
-            y[n] += b[i]*x[n-i];
-    }
-    }
-}
- */
-
-__global__ void cuFirFilter2(const float *d_x, const float *d_filter, float *d_y, const int filterLength, const int filteredDataLength){
+__global__ void cuFirFilter(const float *d_x, float *d_filter, float *d_y, const int filterLength, const int d_yLength){
+    float sum;
+    __shared__ float filt[200];
     
     int i = blockDim.x * blockIdx.x + threadIdx.x;
-    
-    if (i < filteredDataLength)
-    {
-        for (int j = 0; j <= filteredDataLength && j < filterLength; j++)
+    if (i < d_yLength)
+    {     
+        for (size_t j = 0; j < 45; j++)
         {
-            d_y[i] += d_filter[j] * d_x[i-j];
+               
+            if(threadIdx.x < filterLength)
+                filt[threadIdx.x] = d_filter[threadIdx.x+filterLength*j];
+           /*  if(i == 0)
+                 printf("Y %f", filt[i]);
+            */
+            __syncthreads();
+
+                for (int j = 0; j < d_yLength && j < filterLength; j++)
+                {
+                    sum += filt[j] * d_x[i-j];
+                }
+
+            d_y[i] = sum;
         }
     }
 }
 
-__global__ void cuFirFilter(const float *d_data,const float *d_filter, float *d_filteredData, const int filterLength, const int filteredDataLength)
-{
-
-    int i = blockDim.x * blockIdx.x + threadIdx.x;
-
-
-    float sum = 0.0f;
-    //    printf("d_filter: %f d_data: %f \n", d_filter[i], d_data[i]);
-
-    if (i < filteredDataLength)
-    {
-        for (int j = 0; j < filterLength; j++)
-        {
-            // The first (numeratorLength-1) elements contain the filter state
-            sum += d_filter[j] * d_data[i + filterLength - j - 1];
-        }
-    }
-    d_filteredData[i] = sum;
-}
 
 int main() {
     double r_prime[3*(constants::elements)] = {0};      //initiazte r_prime full of 0s
@@ -334,10 +315,8 @@ int main() {
     
     int dataLength = 32200;
     int coeffs = 200;
+    int totCoeffs = coeffs*45;
     int dataOutLen = 32200;
-
-    //float *h_data = new float[dataLength];
-    //float *h_filter = new float[coeffs];
     
     size_t NumberOfElements = sizeof(filter_coefficients::filt_coeffs[0])/sizeof(filter_coefficients::filt_coeffs[0][0]);
     std::cout << "size of : " << NumberOfElements << std::endl;
@@ -347,24 +326,25 @@ int main() {
     cudaMalloc((void **)&d_data, dataLength * sizeof(float));
 
     float *d_filter = nullptr;
-    cudaMalloc((void **)&d_filter, coeffs * sizeof(float));
+    cudaMalloc((void **)&d_filter, totCoeffs * sizeof(float));
 
     float *d_filteredData = nullptr;
     cudaMalloc((void **)&d_filteredData, dataOutLen * sizeof(float));
 
     cudaMemcpy(d_data, audio_data.data(), dataLength * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_filter, filter_coefficients::filt_coeffs[0], coeffs * sizeof(float), cudaMemcpyHostToDevice);  
+    cudaMemcpy(d_filter, filter_coefficients::filt_coeffs, totCoeffs * sizeof(float), cudaMemcpyHostToDevice);  
 
     int threadsPerBlock = 256;
     int blocksPerGrid = (dataOutLen + threadsPerBlock - 1) / threadsPerBlock;
     std::cout << "Threads started: " << blocksPerGrid*threadsPerBlock << std::endl;
+    
     auto start = std::chrono::high_resolution_clock::now();
-    cuFirFilter<<<blocksPerGrid,threadsPerBlock>>>(d_data, d_filter, d_filteredData, coeffs, dataOutLen);
-//    cuFirFilter2<<<blocksPerGrid,threadsPerBlock>>>(d_data, d_filter, d_filteredData, coeffs, dataOutLen);
+
+        cuFirFilter<<<blocksPerGrid,threadsPerBlock>>>(d_data, d_filter, d_filteredData, coeffs, dataOutLen);
+    
+    auto end = std::chrono::high_resolution_clock::now();
 
     cudaMemcpy(h_filteredData, d_filteredData, dataOutLen * sizeof(float), cudaMemcpyDeviceToHost);
-
-    auto end = std::chrono::high_resolution_clock::now();
     // SINGLE DIRECTION BEAMFORMING 
 /*     std::vector<float> audio_out;
     std::vector<float> audio_signal_temp; 
@@ -384,10 +364,9 @@ int main() {
     //std::cout << audio_signal_temp[16000];
     std::cout << "\n ";
 
-    for (int i = 12799; i < 12805; i++)
+    for (int i = 195; i < 206; i++)
     {
         std::cout << "Raw data: "<<  audio_data[i] << " Filtered data: ";
-        std::cout << "\n ";
         std::cout << h_filteredData[i];
         std::cout << "\n ";
     }    
