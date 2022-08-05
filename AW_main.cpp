@@ -181,7 +181,6 @@ void AW_listening_improved(double * audio_out, std::vector<double>& audio_data, 
 
     for (int freq_ind = 0; freq_ind < filter_coefficients::f_bands_N; freq_ind++)
     {
-
         std::cout << "\n";
         std::cout << freq_ind;
 
@@ -193,11 +192,8 @@ void AW_listening_improved(double * audio_out, std::vector<double>& audio_data, 
         }
          
         double frequency = filter_coefficients::center_frequencies[freq_ind];
-
         double k = 2 * constants::pi * frequency/constants::c;
-
         double ny = frequency/constants::f_sampling;
-
         double audio_temp[samples] = {0};   
 
         for (int mic_ind = 0; mic_ind < constants::elements; mic_ind++)
@@ -307,6 +303,18 @@ void filter_improved(double* y, double * x,int x_length,double a_0,const float *
         */
         
     }
+}
+ std::vector<double> filter_imp(std::vector<double> x, std::vector<double> y, int x_length, int P) {
+   
+    for (int i = 0; i < x_length; ++i)
+    {
+        y[i] = x[0] * filter_coefficients::filt_coeffs[0][0];
+        for (int j = 1; j <= 200; ++j)
+        {
+            y[i] += x[i+j] * filter_coefficients::filt_coeffs[0][j];
+        }
+    }
+    return y;
 }
 
 int weight_index(double frequency) {
@@ -467,12 +475,12 @@ int main() {
 
     //filter(test,test_length,a_0,b,P);
 
-    for (int i = 0; i < test_length; i++)
+    /* for (int i = 0; i < test_length; i++)
     {
         //std::cout << "\n";
         //std::cout << test[i];
         
-    }
+    } */
     //std::cout << constants::test_array[4];
     
     //std::cout << r_prime[0];
@@ -540,8 +548,8 @@ int main() {
     //filter(audio_signal_temp,samples,1,filter_coefficients::filter_order +1);
     //filter_improved(audio_filtered,audio_signal_temp,samples,1,filter_coefficients::filt_coeffs[0],200);
     //filter_improved(audio_filtered,audio_signal_temp,samples,1,test_filt_b,6);
-    //test_function(audio_signal_temp2 , audio_filtered2 , filter_coefficients2);
-    filter(audio_filtered,audio_signal_temp,samples,filter_coefficients::filt_coeffs[0],1,filter_coefficients::filter_order);
+    test_function(audio_signal_temp2 , audio_filtered2 , filter_coefficients2);
+    //filter(audio_filtered,audio_signal_temp,samples,filter_coefficients::filt_coeffs[0],1,filter_coefficients::filter_order);
     //filter(audio_filtered,audio_signal_temp,samples,test_filt_b2,1,13);
     auto end = std::chrono::high_resolution_clock::now();
 
@@ -550,7 +558,7 @@ int main() {
     std::cout << "funcSleep() elapsed time is " << float_ms.count() << " milliseconds" << std::endl;
 
 
-    // TESTING 
+    // TESTING  
     double series1[3] = {1,2,1};
     double series2[3] = {10,10,20.1};
     int n = sizeof(series1) / sizeof(double);
@@ -562,7 +570,7 @@ int main() {
     for (int i = 16397; i < 16400; i++)
     {
         std::cout << "\n ";
-        std::cout << audio_filtered[i];
+        std::cout << audio_filtered2[i];
         std::cout << "\n ";
     }
 
