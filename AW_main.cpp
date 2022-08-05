@@ -46,17 +46,17 @@ void generate_array_r_prime(double * r_prime) {
       }
 }
 
-void filter(double * y, double * x, int x_length, const double * b, double a_0, const int P) {
+void filter(double * y, double * x, int x_length, const float * b, double a_0, const int P) {
 
     int n;
     int i;
 
-    for (n = 0; n < x_length; n++)
+    for (n = P; n < x_length; n++)
     {
         //x[n] = std::inner_product(series1, series1 + n, series2, 0.0);
-        for (i = 0; i <= n && i < P; i++)
+        for (i = 0; i <= P; i++)
         {
-            y[n] += b[i]*x[n-i];
+            y[n-P] += b[i]*x[n-i-P];
         }
     }
 }
@@ -124,7 +124,7 @@ void generate_emulated_data(std::vector<double>& audio_data, double * r_prime) {
     {
 
         // Pad data with P zeros in the beginning, where P is the fitler order
-        for (int j = 0; j < filter_coefficients::filter_order; j++)
+        for (int j = 0; j < filter_coefficients::filter_order +1; j++)
         {
             audio_data.push_back(0);
         }
@@ -185,9 +185,9 @@ void AW_listening_improved(double * audio_out, std::vector<double>& audio_data, 
         std::cout << "\n";
         std::cout << freq_ind;
 
-        double b_temp[filter_coefficients::filter_order] = {0};
+        double b_temp[filter_coefficients::filter_order +1] = {0};
 
-        for (int i = 0; i < filter_coefficients::filter_order; i++)
+        for (int i = 0; i < filter_coefficients::filter_order +1; i++)
         {
             b_temp[i] = filter_coefficients::filt_coeffs[freq_ind][i];
         }
@@ -208,10 +208,10 @@ void AW_listening_improved(double * audio_out, std::vector<double>& audio_data, 
                 audio_signal_temp[i] = audio_data[mic_ind + constants::elements*i];
             }
             
-            //filter(audio_signal_temp,samples,1,b_temp,filter_coefficients::filter_order);
+            //filter(audio_signal_temp,samples,1,b_temp,filter_coefficients::filter_order +1);
 
             auto start = std::chrono::high_resolution_clock::now();
-            //filter(audio_signal_temp,samples,1,b_temp,filter_coefficients::filter_order);
+            //filter(audio_signal_temp,samples,1,b_temp,filter_coefficients::filter_order +1);
             auto end = std::chrono::high_resolution_clock::now();
 
             std::chrono::duration<double, std::milli> float_ms = end - start;
@@ -277,7 +277,7 @@ void test_function(float *x,float * y,float *b) {
 }
 
 
-void filter_improved(double* y, double * x,int x_length,double a_0,const double * b, int P) {
+void filter_improved(double* y, double * x,int x_length,double a_0,const float * b, int P) {
     int n = 0;
     int i;
     int first;
@@ -307,6 +307,140 @@ void filter_improved(double* y, double * x,int x_length,double a_0,const double 
         */
         
     }
+}
+
+int weight_index(double frequency) {
+
+    double lambda = constants::c/frequency;
+
+    double lambda_rel = constants::uni_distance/lambda;
+    int index;
+
+    if (lambda_rel > 0.1581)
+    {
+        index = 1;
+
+    } else if (0.156 >= lambda_rel && lambda_rel > 0.0986)
+    {
+        index = 3;
+    } else if (0.0986 >= lambda_rel && lambda_rel > 0.085) {
+
+        index = 5;
+    } else if (0.085 >= lambda_rel && lambda_rel > 0.07) {
+
+        index = 6;
+    } else {
+
+        index = 7;
+    }
+
+    return index;
+}
+
+void generate_weight_matrix(int * weight_matrix) {
+    int elements = constants::elements;
+    int config_modes = constants::available_modes;
+
+    int columns = constants::column_elements;
+    int rows = constants::row_elements;
+
+    int element_index;
+
+    for (int mode = 0; mode < config_modes; mode++)
+    {
+        int row_lim = static_cast<int>((float)(rows)/(float)(mode+1) + 0.99);
+
+        int column_lim = static_cast<int>((float)(columns)/(float)(mode+1) + 0.99);
+
+        int test = (int)(3/4);
+
+        for (int i = 0; i < row_lim; i++)
+        {
+            for (int j = 0; j < column_lim; j++)
+            {
+                element_index = ((mode + 1)*(i)) * rows + (mode +1) *(j);
+                weight_matrix[elements*mode + element_index] = 1;
+                
+            }
+            
+        }
+        
+    }
+    
+
+}
+
+void generate_mfilter_coefficients(float * f_mega_coefficients, double * r_prime, int * weight_matrix,
+    double theta, double phi) {
+
+    int elements = constants::elements;
+    int m_rows = filter_coefficients::f_bands_N * elements;
+    int m_columns = filter_coefficients::filter_order +1 +2;
+
+
+    double x_factor = sin(theta) * cos(phi);
+    double y_factor = sin(theta) * sin(phi);
+
+    const double a_0 = 1.0;
+
+    const int P = filter_coefficients::filter_order;
+
+    for (int freq_ind = 0; freq_ind < filter_coefficients::f_bands_N; freq_ind++)
+    {
+
+        // Center frequency
+        double frequency = filter_coefficients::center_frequencies[freq_ind];
+
+        // Normalized frequency
+        double ny = frequency/((double)(constants::f_sampling));
+
+        // Narrow-band wave vector 
+        double k = 2*constants::pi * frequency/ constants::c;
+
+        // Weight index 
+        int w_index = weight_index(frequency)-1;
+
+        for (int mic_ind = 0; mic_ind < elements; mic_ind++)
+        {
+            if (weight_matrix[elements*w_index + mic_ind] == 1)
+            {                
+                // FIlter coefficients for each band 
+                filter_coefficients::filt_coeffs[freq_ind];
+
+                // Row index 
+                int row_index = freq_ind*elements + mic_ind;
+                
+                // Phase shift value theta is dependent on the frequency and the location of the element (x,y)
+                double phi_0 = -k*(r_prime[mic_ind]*x_factor + r_prime[mic_ind + elements]*y_factor);
+
+                // Calculation coefficients
+                double A = sin(phi_0)/(4*constants::pi*ny*a_0);
+                double B = cos(phi_0)/a_0;
+
+                // Calculation of the mega filter coefficients!
+                f_mega_coefficients[row_index*m_columns + 0] = A* filter_coefficients::filt_coeffs[freq_ind][0];
+
+                f_mega_coefficients[row_index*m_columns + 1] = B*filter_coefficients::filt_coeffs[freq_ind][0] +  A* filter_coefficients::filt_coeffs[freq_ind][1];
+
+                for (int i = 2; i <= P ; i++)
+                {
+                    f_mega_coefficients[row_index*m_columns + i] = B*filter_coefficients::filt_coeffs[freq_ind][i-1] + A*(filter_coefficients::filt_coeffs[freq_ind][i] - filter_coefficients::filt_coeffs[freq_ind][i-2]);
+                }
+
+                f_mega_coefficients[row_index*m_columns + P+1] = (B*filter_coefficients::filt_coeffs[freq_ind][P] - A*filter_coefficients::filt_coeffs[freq_ind][P-1]); 
+
+                f_mega_coefficients[row_index*m_columns + P+2] = - A*filter_coefficients::filt_coeffs[freq_ind][P];    
+  
+            }
+            
+            
+        }
+
+        
+    }
+    
+
+
 }
 
 int main() {
@@ -357,16 +491,19 @@ int main() {
 
     generate_emulated_data(audio_data,r_prime);
 
+    int samples = audio_data.size()/constants::elements;
     
-    for (int i = 32399; i < 32403; i++)
+    /*
+    for (int i = samples +195; i < samples + 205; i++)
     {
         std::cout << "\n ";
         std::cout << audio_data[i];
         std::cout << "\n ";
     }
+    */
     
     
-    int samples = audio_data.size()/constants::elements;
+   
 
     // SINGLE DIRECTION BEAMFORMING 
     std::vector<double> audio_out;
@@ -390,6 +527,9 @@ int main() {
     double test_filt_b[6] = {0.3, 0.1, 0.2, 0.7, -0.5, 0.5};
 
 
+    const double test_filt_b2[13] = {0.3, 0.4, -0.5, 0.3, 0.2, 0.9, -0.1, -0.78, -0.987, -0.49, -0.26, 0.1, 0.99};
+
+
     for (int i = 0; i < samples; i++)
     {
         audio_signal_temp[i] = audio_data[i];
@@ -397,11 +537,12 @@ int main() {
     }
 
     auto start = std::chrono::high_resolution_clock::now();
-    //filter(audio_signal_temp,samples,1,filter_coefficients::filter_order);
+    //filter(audio_signal_temp,samples,1,filter_coefficients::filter_order +1);
     //filter_improved(audio_filtered,audio_signal_temp,samples,1,filter_coefficients::filt_coeffs[0],200);
     //filter_improved(audio_filtered,audio_signal_temp,samples,1,test_filt_b,6);
-    test_function(audio_signal_temp2 , audio_filtered2 , filter_coefficients2);
-    //filter(audio_filtered,audio_signal_temp,samples,filter_coefficients::filt_coeffs[0],1,filter_coefficients::filter_order);
+    //test_function(audio_signal_temp2 , audio_filtered2 , filter_coefficients2);
+    filter(audio_filtered,audio_signal_temp,samples,filter_coefficients::filt_coeffs[0],1,filter_coefficients::filter_order);
+    //filter(audio_filtered,audio_signal_temp,samples,test_filt_b2,1,13);
     auto end = std::chrono::high_resolution_clock::now();
 
     std::chrono::duration<double, std::milli> float_ms = end - start;
@@ -418,15 +559,58 @@ int main() {
     std::cout << "\n ";
     
 
-    for (int i = 16199; i < 16206; i++)
+    for (int i = 16397; i < 16400; i++)
     {
         std::cout << "\n ";
-        std::cout << audio_filtered2[i];
+        std::cout << audio_filtered[i];
         std::cout << "\n ";
     }
-    
-    
 
+
+    int weight_matrix[constants::elements * constants::available_modes] = {0};
+
+    generate_weight_matrix(weight_matrix);
+
+    int mega_f_size = filter_coefficients::f_bands_N * constants::elements * (filter_coefficients::filter_order +1 +2); 
+
+    float mega_f_coefficients[mega_f_size] = {0};
+
+
+    auto start3 = std::chrono::high_resolution_clock::now();
+
+    generate_mfilter_coefficients(mega_f_coefficients,r_prime,weight_matrix,0.3,1.32);
+    
+    auto end3 = std::chrono::high_resolution_clock::now();
+
+    std::chrono::duration<double, std::milli> float_ms3 = end3 - start3;
+
+    std::cout << "funcSleep() elapsed time is " << float_ms3.count() << " milliseconds" << std::endl;
+
+    int column_size = filter_coefficients::filter_order +1 +2;
+
+    for (int i = 0; i < filter_coefficients::filter_order +1 +2; i++)
+    {
+        std::cout << "\n  ";
+        std::cout << mega_f_coefficients[i + 0*column_size];
+    }
+    std::cout << "\n  ";
+    
+    
+    /*
+    std::cout << "\n ";
+    std::cout << "\nWeight matrix = \n ";
+    for (int i = 0; i < constants::available_modes; i++)
+    {
+        for (int j = 0; j < constants::elements; j++)
+        {
+            std::cout << weight_matrix[i*constants::elements + j];
+            std::cout << "  ";
+
+        }
+        std::cout << "\n ";
+    }
+    */
+    
     
     /*
     double test_series[2][2] = {{1,2},{3,4}};

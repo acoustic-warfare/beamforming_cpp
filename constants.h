@@ -9,11 +9,12 @@ namespace constants
     constexpr int total_elements { 64 };
     constexpr int elements { 64 };
     constexpr int column_elements { 8 };
-    constexpr int row_elements = { 8 };
-    constexpr double uni_distance = { 0.02 };
-    constexpr double r_ax = { 0 };
-    constexpr double r_ay = { 0 };
-    constexpr double r_az = { 0 };
+    constexpr int row_elements { 8 };
+    constexpr double uni_distance { 0.02 };
+    constexpr double r_ax { 0 };
+    constexpr double r_ay { 0 };
+    constexpr double r_az  { 0 };
+    constexpr int available_modes {7};
     
 
     // Physical constants

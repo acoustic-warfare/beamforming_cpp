@@ -34,7 +34,7 @@ elements = rows*columns     # number of elements
 distance = 20 * 10**(-3)    # distance between elements (m)
 
 # --- FILTER variables ---
-filter_order = 200          # filter order
+filter_order = 199          # filter order
 scale_factor = 10000        # scale factor, adjusting filter width
 f_bands_N = 45                                  # number of frequency bands
 bandwidth = [100, f_sampling/2-f_sampling/100]  # bandwidth of incoming audio signal
