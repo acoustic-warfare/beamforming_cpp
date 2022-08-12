@@ -286,11 +286,11 @@ __global__ void cuFirFilter(const float *d_x, float *d_filter, float *d_y, const
     int i = blockDim.x * blockIdx.x + threadIdx.x;
     if (i < d_yLength)
     {     
-        for (size_t j = 0; j < 45; j++)
+        for (size_t k = 0; k < 45; k++)
         {
                
             if(threadIdx.x < filterLength)
-                filt[threadIdx.x] = d_filter[threadIdx.x+filterLength*j];
+                filt[threadIdx.x] = d_filter[threadIdx.x+filterLength*k];
            /*  if(i == 0)
                  printf("Y %f", filt[i]);
             */
