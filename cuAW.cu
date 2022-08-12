@@ -265,20 +265,11 @@ void AW_listening_improved(double * audio_out, std::vector<double>& audio_data, 
         
 //     }
 // }
-/* std::vector<double> filter_imp(std::vector<double> x, std::vector<double> y, int x_length, double a_0, int P) {
-   
-    for (int i = 0; i < x_length; ++i)
-    {
-        y[i] = x[0] * filter_coefficients::filt_coeffs[0][0];
-        for (int j = 1; j <= 200; ++j)
-        {
-            y[i] += x[i+j] * filter_coefficients::filt_coeffs[0][j];
-        }
-    }
-    return y;
-}
- */
 
+
+/* 
+CudaFirFilter. Does 45 sets(bands) of coefficients for a mic.
+*/
 __global__ void cuFirFilter(const float *d_x, float *d_filter, float *d_y, const int filterLength, const int d_yLength){
     float sum;
     __shared__ float filt[200];
@@ -313,6 +304,7 @@ int main() {
     std::vector<float> audio_data;
     generate_emulated_data(audio_data,r_prime);
     
+    //32000 samples and 200 padded zeros.
     int dataLength = 32200;
     int coeffs = 200;
     int totCoeffs = coeffs*45;
